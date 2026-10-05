@@ -6,8 +6,9 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.datasets import make_circles, make_classification, make_moons
-from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, cohen_kappa_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 
 
@@ -30,6 +31,17 @@ class TreeResults:
     y_test: np.ndarray
     tree_depth: int
     leaf_count: int
+
+
+@dataclass(frozen=True)
+class ForestResults:
+    model: RandomForestClassifier
+    metrics: Dict[str, float]
+    confusion: np.ndarray
+    X_train: np.ndarray
+    X_test: np.ndarray
+    y_train: np.ndarray
+    y_test: np.ndarray
 
 
 def make_dataset(name: str, n_samples: int, noise: float, random_state: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -104,6 +116,7 @@ def fit_and_evaluate(
         "Precision": precision_score(y_test, test_pred, zero_division=0),
         "Recall": recall_score(y_test, test_pred, zero_division=0),
         "F1": f1_score(y_test, test_pred, zero_division=0),
+        "Kappa": cohen_kappa_score(y_test, test_pred),
     }
 
     return TreeResults(
@@ -116,6 +129,61 @@ def fit_and_evaluate(
         y_test=y_test,
         tree_depth=model.get_depth(),
         leaf_count=model.get_n_leaves(),
+    )
+
+
+def fit_random_forest(
+    X: np.ndarray,
+    y: np.ndarray,
+    criterion: str,
+    n_estimators: int,
+    max_depth: int | None,
+    min_samples_leaf: int,
+    max_features: str | None,
+    test_size: float,
+    random_state: int,
+) -> ForestResults:
+    """Fit a random forest on the same style of train/test split used by the tree demo."""
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=float(test_size),
+        random_state=int(random_state),
+        stratify=y,
+    )
+    model = RandomForestClassifier(
+        n_estimators=int(n_estimators),
+        criterion=criterion,
+        max_depth=max_depth,
+        min_samples_leaf=int(min_samples_leaf),
+        max_features=max_features,
+        bootstrap=True,
+        oob_score=True,
+        random_state=int(random_state),
+        n_jobs=-1,
+    )
+    model.fit(X_train, y_train)
+    train_pred = model.predict(X_train)
+    test_pred = model.predict(X_test)
+
+    metrics = {
+        "Train accuracy": accuracy_score(y_train, train_pred),
+        "Test accuracy": accuracy_score(y_test, test_pred),
+        "Precision": precision_score(y_test, test_pred, zero_division=0),
+        "Recall": recall_score(y_test, test_pred, zero_division=0),
+        "F1": f1_score(y_test, test_pred, zero_division=0),
+        "Kappa": cohen_kappa_score(y_test, test_pred),
+        "OOB accuracy": float(model.oob_score_),
+    }
+
+    return ForestResults(
+        model=model,
+        metrics=metrics,
+        confusion=confusion_matrix(y_test, test_pred, labels=[0, 1]),
+        X_train=X_train,
+        X_test=X_test,
+        y_train=y_train,
+        y_test=y_test,
     )
 
 
