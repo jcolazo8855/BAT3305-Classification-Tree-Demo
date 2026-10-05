@@ -11,10 +11,11 @@ Students can explore:
 - Maximum depth and underfitting/overfitting
 - Minimum samples per leaf as a smoothing control
 - Cost-complexity pruning with `ccp_alpha`
-- Train/test performance and confusion-matrix diagnostics
+- Train/test performance, Cohen's kappa, and confusion-matrix diagnostics
 - Feature importance
 - Exact root-to-leaf classification paths for new observations
 - Tree instability across random samples
+- A Random Forests tab comparing bagging/feature randomness against a single tree, including out-of-bag accuracy
 
 ## Included datasets
 
