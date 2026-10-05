@@ -11,6 +11,7 @@ from tree_utils import (
     classification_path,
     decision_grid,
     fit_and_evaluate,
+    fit_random_forest,
     make_dataset,
     pruning_curve,
 )
@@ -179,8 +180,8 @@ def complexity_message():
     return "✅ This is a useful middle-complexity setting for exploring how trees partition the feature space."
 
 
-main_tab, tree_tab, split_tab, pruning_tab, path_tab, lab_tab = st.tabs(
-    ["Decision Regions", "Tree Structure", "How Splits Work", "Pruning", "Classify a Case", "Student Lab"]
+main_tab, tree_tab, forest_tab, split_tab, pruning_tab, path_tab, lab_tab = st.tabs(
+    ["Decision Regions", "Tree Structure", "Random Forests", "How Splits Work", "Pruning", "Classify a Case", "Student Lab"]
 )
 
 with main_tab:
@@ -207,13 +208,14 @@ with main_tab:
         )
 
     st.subheader("Performance snapshot")
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
     m1.metric("Train accuracy", f"{results.metrics['Train accuracy']:.1%}")
     m2.metric("Test accuracy", f"{results.metrics['Test accuracy']:.1%}")
     m3.metric("Precision", f"{results.metrics['Precision']:.1%}")
     m4.metric("Recall", f"{results.metrics['Recall']:.1%}")
     m5.metric("F1", f"{results.metrics['F1']:.1%}")
-    m6.metric("Leaves", f"{results.leaf_count}")
+    m6.metric("Kappa", f"{results.metrics['Kappa']:.3f}", help="Cohen's kappa adjusts observed agreement for agreement expected by chance.")
+    m7.metric("Leaves", f"{results.leaf_count}")
 
 with tree_tab:
     st.subheader("The fitted decision tree")
@@ -227,6 +229,134 @@ with tree_tab:
     st.markdown("### Feature importance")
     st.bar_chart(fi.set_index("Feature"))
     st.caption("Tree importance measures how much each feature reduces impurity across the fitted tree. It is not a causal effect.")
+
+
+with forest_tab:
+    st.subheader("From one tree to a random forest")
+    st.write(
+        "A random forest grows many decision trees on bootstrap samples and averages their votes. "
+        "It also randomizes the features considered at each split, reducing correlation among trees. "
+        "The goal is to keep the flexibility of trees while reducing the instability and variance of a single tree."
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        rf_trees = st.slider("Number of trees", 10, 300, 100, 10, key="rf_trees")
+    with c2:
+        rf_depth_label = st.selectbox(
+            "Maximum depth per tree",
+            ["None", "3", "5", "8", "12"],
+            index=0,
+            key="rf_depth",
+        )
+        rf_depth = None if rf_depth_label == "None" else int(rf_depth_label)
+    with c3:
+        rf_leaf = st.slider("Minimum samples per leaf", 1, 20, 2, 1, key="rf_leaf")
+    with c4:
+        rf_features_label = st.radio(
+            "Features tried at each split",
+            ["√p (random subset)", "All features"],
+            key="rf_features",
+        )
+        rf_features = "sqrt" if rf_features_label.startswith("√") else None
+
+    forest = fit_random_forest(
+        X=X,
+        y=y,
+        criterion=criterion,
+        n_estimators=rf_trees,
+        max_depth=rf_depth,
+        min_samples_leaf=rf_leaf,
+        max_features=rf_features,
+        test_size=test_size,
+        random_state=int(random_state),
+    )
+
+    left, right = st.columns([1.55, 0.95], gap="large")
+    with left:
+        fig, ax = plt.subplots(figsize=(9.2, 6.0))
+        xx, yy, grid = decision_grid(X, resolution=240)
+        rf_pred = forest.model.predict(grid).reshape(xx.shape)
+        rf_proba = forest.model.predict_proba(grid)[:, 1].reshape(xx.shape)
+        ax.contourf(xx, yy, rf_pred, levels=[-0.5, 0.5, 1.5], alpha=0.12)
+        ax.contour(xx, yy, rf_proba, levels=[0.5], linewidths=2.0)
+        ax.scatter(
+            forest.X_train[:, 0],
+            forest.X_train[:, 1],
+            c=forest.y_train,
+            s=46,
+            edgecolors="white",
+            linewidths=0.5,
+            label="Training observations",
+        )
+        ax.scatter(
+            forest.X_test[:, 0],
+            forest.X_test[:, 1],
+            c=forest.y_test,
+            marker="X",
+            s=80,
+            linewidths=0.7,
+            edgecolors="black",
+            label="Test observations",
+        )
+        ax.set_xlabel("Feature 1")
+        ax.set_ylabel("Feature 2")
+        ax.set_title(f"Random forest decision regions ({rf_trees} trees)")
+        ax.legend(loc="best", frameon=True)
+        ax.grid(alpha=0.12)
+        fig.tight_layout()
+        st.pyplot(fig, use_container_width=True)
+        st.caption("The forest averages many rectangular tree partitions, which can create a smoother and more stable overall boundary.")
+
+    with right:
+        st.markdown("### Single tree vs. forest")
+        comparison = pd.DataFrame(
+            {
+                "Metric": ["Test accuracy", "F1", "Kappa"],
+                "Single tree": [
+                    results.metrics["Test accuracy"],
+                    results.metrics["F1"],
+                    results.metrics["Kappa"],
+                ],
+                "Random forest": [
+                    forest.metrics["Test accuracy"],
+                    forest.metrics["F1"],
+                    forest.metrics["Kappa"],
+                ],
+            }
+        )
+        display_comparison = comparison.copy()
+        display_comparison["Single tree"] = display_comparison.apply(
+            lambda r: f"{r['Single tree']:.3f}" if r["Metric"] == "Kappa" else f"{r['Single tree']:.1%}",
+            axis=1,
+        )
+        display_comparison["Random forest"] = display_comparison.apply(
+            lambda r: f"{r['Random forest']:.3f}" if r["Metric"] == "Kappa" else f"{r['Random forest']:.1%}",
+            axis=1,
+        )
+        st.dataframe(display_comparison, hide_index=True, use_container_width=True)
+
+        r1, r2 = st.columns(2)
+        r1.metric("Forest test accuracy", f"{forest.metrics['Test accuracy']:.1%}")
+        r2.metric("Forest kappa", f"{forest.metrics['Kappa']:.3f}")
+        r3, r4 = st.columns(2)
+        r3.metric("OOB accuracy", f"{forest.metrics['OOB accuracy']:.1%}", help="Out-of-bag observations were not used to fit the particular trees voting on them.")
+        r4.metric("Trees", f"{rf_trees}")
+
+        st.markdown("### Why a forest can improve on one tree")
+        st.markdown(
+            "- **Bootstrap sampling:** each tree sees a different resampled training set.\n"
+            "- **Feature randomness:** trees are encouraged to make different mistakes.\n"
+            "- **Voting:** averaging many noisy trees reduces variance.\n"
+            "- **Tradeoff:** the forest is usually less interpretable than one tree."
+        )
+
+    st.markdown("### Classroom experiment")
+    st.write(
+        "Set the single tree to a fairly deep specification, then change the random seed several times. "
+        "Compare how much the single-tree boundary and test score move versus the random forest. "
+        "This demonstrates why forests are often more stable."
+    )
 
 with split_tab:
     st.subheader("How a classification-tree split works")
