@@ -368,7 +368,7 @@ with split_tab:
     a, b = st.columns(2, gap="large")
     with a:
         st.markdown("#### Gini index — course convention")
-        st.latex(r"Gini = 1 - \sum_k p_k^2")
+        st.latex(r"Gini = p(1-p)")
         st.write(
             "For BAT 3305, use binary Gini = p(1-p). It is 0 for a pure node and 0.25 for a 50/50 node. "
             "scikit-learn internally uses 2p(1-p) for binary Gini; this rescales impurity but chooses the same splits."
