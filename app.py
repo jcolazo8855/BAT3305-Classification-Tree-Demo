@@ -367,28 +367,28 @@ with split_tab:
 
     a, b = st.columns(2, gap="large")
     with a:
-        st.markdown("#### Gini impurity")
+        st.markdown("#### Gini index — course convention")
         st.latex(r"Gini = 1 - \sum_k p_k^2")
         st.write(
-            "Gini is 0 for a perfectly pure node. For a balanced two-class node, Gini is 0.5. "
-            "The tree prefers splits that reduce the weighted impurity of the children."
+            "For BAT 3305, use binary Gini = p(1-p). It is 0 for a pure node and 0.25 for a 50/50 node. "
+            "scikit-learn internally uses 2p(1-p) for binary Gini; this rescales impurity but chooses the same splits."
         )
     with b:
         st.markdown("#### Entropy")
         st.latex(r"Entropy = -\sum_k p_k \log_2(p_k)")
         st.write(
-            "Entropy is also 0 for a pure node and reaches 1 for a 50/50 two-class node. "
-            "In many datasets Gini and entropy choose similar trees, but students can compare them here."
+            "Each class contributes p × log2(p), and node entropy is the negative sum. Entropy is 0 for a pure node and reaches 1 for a 50/50 two-class node. "
+            "Students can compare Gini and entropy while holding the sample fixed."
         )
 
     p = st.slider("Imagine a node with this proportion of Class 1", 0.0, 1.0, 0.5, 0.01)
-    gini = 1 - (p**2 + (1-p)**2)
+    gini = p * (1 - p)
     entropy = 0.0
     for q in [p, 1-p]:
         if q > 0:
             entropy -= q * np.log2(q)
     c1, c2 = st.columns(2)
-    c1.metric("Gini impurity", f"{gini:.3f}")
+    c1.metric("Gini index", f"{gini:.3f}")
     c2.metric("Entropy", f"{entropy:.3f}")
 
     st.markdown("### Why the decision regions look like rectangles")
